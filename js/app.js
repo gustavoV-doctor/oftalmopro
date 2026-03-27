@@ -67,6 +67,10 @@ function saveDay(data) {
   localStorage.setItem(storageKey(data.date), JSON.stringify(data));
   // Registrar este dia no índice de dias trabalhados
   saveDayToIndex(data.date);
+  // Sync com Firebase
+  if (typeof saveAndSync === 'function') {
+    saveAndSync(data.date);
+  }
 }
 
 function saveDayToIndex(dateStr) {
@@ -544,6 +548,19 @@ document.addEventListener('keydown', (e) => {
     addPatient();
   }
 });
+
+// ===== RENDER ALL (chamado pelo firebase-sync após download) =====
+function renderAll() {
+  renderToday();
+  populateMonthFilters();
+  // Re-render tab ativa
+  const activeTab = document.querySelector('.nav-btn.active');
+  if (activeTab) {
+    const tab = activeTab.getAttribute('onclick')?.match(/switchTab\('(.+?)'\)/)?.[1];
+    if (tab === 'historico') renderHistory();
+    if (tab === 'relatorios') renderReports();
+  }
+}
 
 // ===== INIT =====
 function init() {
