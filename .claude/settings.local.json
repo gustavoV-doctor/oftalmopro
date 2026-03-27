@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install \"markitdown[pptx]\")",
+      "Bash(pip3 install \"markitdown[pptx]\")",
+      "Bash(python3 -m markitdown \"/Users/guviolin/Library/CloudStorage/OneDrive-Pessoal/AULAS PROFESSOR BRUNO/Glaucoma_Aula_Completa.pptx\")",
+      "Bash(pip3 install \"markitdown[pptx]\" --upgrade)",
+      "Bash(pip3 install python-pptx)",
+      "Bash(python3:*)",
+      "Bash(brew install poppler)",
+      "WebFetch(domain:prontuario-eletronico-navy.vercel.app)",
+      "Bash(ls -la \"/Users/guviolin/Downloads/prompt master\"*)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(open \"/Users/guviolin/Downloads/prompt master /index.html\")",
+      "Bash(/usr/bin/osascript -e 'tell application \"\"Google Chrome\"\" to set URL of active tab of front window to \"\"file:///Users/guviolin/Downloads/prompt%20master%20/index.html\"\"')",
+      "Bash(/usr/bin/osascript -e 'tell application \"\"Google Chrome\"\" to set URL of active tab of front window to \"\"http://localhost:8080\"\"')",
+      "Bash(gh auth:*)",
+      "Bash(git --version)",
+      "Bash(git config:*)"
+    ]
+  }
+}

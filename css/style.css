@@ -159,6 +159,55 @@ body {
   color: var(--green);
 }
 
+/* ===== STATS BAR ===== */
+.stats-bar {
+  display: flex;
+  gap: 10px;
+  padding: 12px 36px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.stats-bar::-webkit-scrollbar { display: none; }
+.stats-bar:empty { display: none; }
+
+.stat-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+.stat-badge:hover {
+  border-color: var(--green);
+}
+
+.stat-badge .badge-count {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.stat-badge.patients .badge-count { background: var(--green); }
+.stat-badge.procedure .badge-count { background: #4f6ef7; }
+
+.stat-badge .badge-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.stat-badge.has-value .badge-label { color: var(--text-primary); }
+
 /* ===== TABS ===== */
 .tab-content {
   display: none;
@@ -676,4 +725,6 @@ body {
   .report-cards, .history-summary { grid-template-columns: 1fr 1fr; }
   .procedures-grid { gap: 6px; }
   .procedure-chip { font-size: 0.75rem; padding: 6px 10px; }
+  .stats-bar { padding: 10px 20px; gap: 8px; }
+  .stat-badge { padding: 6px 12px; }
 }

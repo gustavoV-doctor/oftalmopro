@@ -207,12 +207,48 @@ function toggleProcedure(patientId, procedureId) {
 }
 
 // ===== RENDER: HOJE =====
+function renderStatsBar() {
+  const today = getTodayStr();
+  const data = loadDay(today);
+  const bar = document.getElementById('stats-bar');
+  if (!bar) return;
+
+  const totalPatients = data.patients.length;
+
+  // Contar procedimentos
+  const counts = {};
+  PROCEDURES.forEach(p => counts[p.id] = 0);
+  data.patients.forEach(p => {
+    (p.procedures || []).forEach(procId => {
+      if (counts[procId] !== undefined) counts[procId]++;
+    });
+  });
+
+  let html = `<div class="stat-badge patients ${totalPatients > 0 ? 'has-value' : ''}">
+    <span class="badge-count">${totalPatients}</span>
+    <span class="badge-label">Pacientes</span>
+  </div>`;
+
+  PROCEDURES.forEach(proc => {
+    const count = counts[proc.id];
+    html += `<div class="stat-badge procedure ${count > 0 ? 'has-value' : ''}">
+      <span class="badge-count">${count}</span>
+      <span class="badge-label">${proc.name}</span>
+    </div>`;
+  });
+
+  bar.innerHTML = html;
+}
+
 function renderToday() {
   const today = getTodayStr();
   const data = loadDay(today);
 
   // Header
   document.getElementById('header-date').textContent = getFullDateHeader();
+
+  // Stats bar
+  renderStatsBar();
 
   // Total do dia
   const dayTotal = data.patients.reduce((sum, p) => sum + calculatePatientTotal(p), 0);
