@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OftalmoPro - Prontuário Eletrônico</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <i data-lucide="eye" class="logo-icon"></i>
+        <span class="logo-text">OftalmoPro</span>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <button class="nav-btn active" data-tab="hoje" onclick="switchTab('hoje')">
+        <i data-lucide="calendar-days"></i>
+        <span>Hoje</span>
+      </button>
+      <button class="nav-btn" data-tab="historico" onclick="switchTab('historico')">
+        <i data-lucide="history"></i>
+        <span>Histórico</span>
+      </button>
+      <button class="nav-btn" data-tab="relatorios" onclick="switchTab('relatorios')">
+        <i data-lucide="bar-chart-3"></i>
+        <span>Relatórios</span>
+      </button>
+    </nav>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <!-- Header -->
+    <header class="top-header">
+      <div class="header-info">
+        <h1 id="header-date">Carregando...</h1>
+        <p class="header-subtitle">Gerencie seus pacientes e procedimentos do dia.</p>
+      </div>
+      <div class="header-total" id="header-total">
+        <span class="total-label">TOTAL DO DIA</span>
+        <span class="total-value" id="daily-total">R$ 0,00</span>
+      </div>
+    </header>
+
+    <!-- Tab: Hoje -->
+    <section class="tab-content active" id="tab-hoje">
+      <div class="section-header">
+        <h2>Pacientes</h2>
+        <button class="btn-primary" onclick="openAddPatientModal()">
+          <i data-lucide="plus"></i> Novo Paciente
+        </button>
+      </div>
+      <div id="patient-list" class="patient-list">
+        <div class="empty-state" id="empty-state">
+          <i data-lucide="users" class="empty-icon"></i>
+          <p><strong>Nenhum paciente registrado hoje.</strong></p>
+          <p class="text-muted">Clique em "Novo Paciente" para começar.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab: Histórico -->
+    <section class="tab-content" id="tab-historico">
+      <div class="section-header">
+        <h2>Histórico de Atendimentos</h2>
+        <div class="filter-group">
+          <select id="filter-month" onchange="renderHistory()">
+            <option value="">Todos os meses</option>
+          </select>
+        </div>
+      </div>
+      <div class="history-summary" id="history-summary"></div>
+      <div class="history-table-wrapper">
+        <table class="history-table" id="history-table">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Dia</th>
+              <th>Pacientes</th>
+              <th>Faturamento</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="history-body"></tbody>
+        </table>
+        <div class="empty-state" id="history-empty" style="display:none;">
+          <i data-lucide="calendar-x" class="empty-icon"></i>
+          <p><strong>Nenhum atendimento registrado.</strong></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab: Relatórios -->
+    <section class="tab-content" id="tab-relatorios">
+      <div class="section-header">
+        <h2>Relatório Financeiro</h2>
+        <div class="filter-group">
+          <select id="report-month" onchange="renderReports()">
+            <option value="">Todos os meses</option>
+          </select>
+        </div>
+      </div>
+      <div class="report-cards" id="report-cards"></div>
+      <div class="report-detail" id="report-detail"></div>
+    </section>
+  </main>
+
+  <!-- Modal: Adicionar Paciente -->
+  <div class="modal-overlay" id="modal-add-patient">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Adicionar Paciente</h3>
+        <button class="modal-close" onclick="closeModal('modal-add-patient')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <label>Nome do Paciente</label>
+        <input type="text" id="input-patient-name" placeholder="Ex: Maria Joana da Silva" autocomplete="off">
+        <label>Horário</label>
+        <input type="time" id="input-patient-time">
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeModal('modal-add-patient')">Cancelar</button>
+        <button class="btn-primary" onclick="addPatient()">Salvar Paciente</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Detalhes do Dia -->
+  <div class="modal-overlay" id="modal-day-detail">
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h3 id="detail-day-title">Detalhes do Dia</h3>
+        <button class="modal-close" onclick="closeModal('modal-day-detail')">&times;</button>
+      </div>
+      <div class="modal-body" id="detail-day-body"></div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeModal('modal-day-detail')">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+  <script>lucide.createIcons();</script>
+</body>
+</html>
