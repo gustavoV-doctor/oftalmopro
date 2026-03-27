@@ -162,8 +162,9 @@ body {
 /* ===== STATS BAR ===== */
 .stats-bar {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
-  padding: 12px 36px;
+  padding: 0 0 20px 0;
   overflow-x: auto;
   scrollbar-width: none;
 }
