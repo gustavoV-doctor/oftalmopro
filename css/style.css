@@ -1199,6 +1199,49 @@ em {
   min-width: 90px;
 }
 
+.note-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.note-entry {
+  padding: 10px 14px;
+  background: var(--bg-soft);
+  border-radius: var(--radius);
+  font-size: 0.84rem;
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+
+.note-entry-meta {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.note-entry-meta span:first-child {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.note-entry-text {
+  white-space: normal;
+}
+
+.visit-note-summary {
+  margin-top: 12px;
+  font-size: 0.76rem;
+  color: var(--ink-3);
+  font-style: italic;
+}
+
 /* ===== SIDE PANEL ===== */
 .side-panel-overlay {
   position: fixed;

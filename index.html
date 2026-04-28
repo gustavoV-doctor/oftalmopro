@@ -278,14 +278,24 @@
       </div>
       <div class="modal-body">
         <input type="hidden" id="cn-visit-id">
+        <input type="hidden" id="cn-entry-id">
         <div class="form-field full">
-          <label>Anotação livre</label>
-          <textarea id="cn-notes" rows="9" placeholder="Escreva tudo em um único espaço: queixa, exame, diagnóstico, conduta, retorno..."></textarea>
+          <label>Tipo de nota</label>
+          <select id="cn-note-type">
+            <option value="Consulta">Consulta</option>
+            <option value="Resultado de exame">Resultado de exame</option>
+            <option value="Retorno">Retorno</option>
+            <option value="Observação">Observação</option>
+          </select>
+        </div>
+        <div class="form-field full">
+          <label>Nota livre</label>
+          <textarea id="cn-notes" rows="9" placeholder="Escreva a nova evolução, resultado de exame, conduta, retorno..."></textarea>
         </div>
       </div>
       <div class="modal-footer">
         <button class="btn-ghost" onclick="closeModal('modal-clinical')">Cancelar</button>
-        <button class="btn-dark" onclick="saveClinicalNotes()">Salvar anotações</button>
+        <button class="btn-dark" onclick="saveClinicalNotes()">Salvar nota</button>
       </div>
     </div>
   </div>

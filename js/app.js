@@ -149,10 +149,78 @@ function createClinicalNotes(text = '') {
   return { text: String(text || '').trim() };
 }
 
+function createClinicalEntry(text = '', type = 'Consulta', createdAt = nowIso()) {
+  const clean = String(text || '').trim();
+  if (!clean) return null;
+
+  return {
+    id: generateId(),
+    type: type || 'Consulta',
+    text: clean,
+    createdAt,
+  };
+}
+
+function normalizeClinicalEntry(entry) {
+  if (!entry) return null;
+  const text = String(entry.text || '').trim();
+  if (!text) return null;
+
+  return {
+    id: entry.id || generateId(),
+    type: entry.type || 'Consulta',
+    text,
+    createdAt: entry.createdAt || nowIso(),
+  };
+}
+
+function getClinicalEntries(visit) {
+  const entries = Array.isArray(visit?.clinicalEntries)
+    ? visit.clinicalEntries.map(normalizeClinicalEntry).filter(Boolean)
+    : [];
+
+  if (entries.length) return entries;
+
+  const legacyText = getClinicalNoteText(visit?.clinicalNotes);
+  const legacyEntry = createClinicalEntry(legacyText, 'Consulta', visit?.createdAt || nowIso());
+  return legacyEntry ? [legacyEntry] : [];
+}
+
+function summarizeClinicalEntries(entries) {
+  return entries
+    .map(entry => `[${entry.type}] ${entry.text}`)
+    .join('\n\n');
+}
+
+function formatEntryTime(entry) {
+  if (!entry?.createdAt) return '';
+  const date = new Date(entry.createdAt);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
 function renderClinicalText(text) {
   const clean = String(text || '').trim();
   if (!clean) return '';
   return escapeHTML(clean).replace(/\n/g, '<br>');
+}
+
+function renderClinicalEntries(visit, dateStr = '', allowEdit = false) {
+  const entries = getClinicalEntries(visit);
+  if (!entries.length) return '';
+
+  return `<div class="note-list">
+    ${entries.map(entry => `
+      <div class="note-entry">
+        <div class="note-entry-meta">
+          <span>${escapeHTML(entry.type)}</span>
+          ${formatEntryTime(entry) ? `<span>${escapeHTML(formatEntryTime(entry))}</span>` : ''}
+        </div>
+        <div class="note-entry-text">${renderClinicalText(entry.text)}</div>
+        ${allowEdit ? `<button class="btn-link" onclick="openClinicalNotes('${visit.id}', '${dateStr}', '${entry.id}')">Editar nota</button>` : ''}
+      </div>
+    `).join('')}
+  </div>`;
 }
 
 // ===== DADOS: DIAS =====
@@ -285,6 +353,7 @@ function migrateLegacyData() {
     data.patients = data.patients.map(visit => {
       if (visit.patientId) return {
         ...visit,
+        clinicalEntries: getClinicalEntries(visit),
         clinicalNotes: createClinicalNotes(getClinicalNoteText(visit.clinicalNotes)),
       };
 
@@ -303,6 +372,7 @@ function migrateLegacyData() {
       return {
         ...visit,
         patientId: patient.id,
+        clinicalEntries: getClinicalEntries(visit),
         clinicalNotes: createClinicalNotes(getClinicalNoteText(visit.clinicalNotes)),
       };
     });
@@ -572,6 +642,8 @@ function saveVisit() {
 
   const today = getTodayStr();
   const data = loadDay(today);
+  const firstNote = createClinicalEntry(document.getElementById('visit-notes').value, 'Consulta');
+  const clinicalEntries = firstNote ? [firstNote] : [];
 
   data.patients.push({
     id: generateId(),
@@ -579,7 +651,8 @@ function saveVisit() {
     name: patient.name,
     time,
     procedures: [],
-    clinicalNotes: createClinicalNotes(document.getElementById('visit-notes').value),
+    clinicalEntries,
+    clinicalNotes: createClinicalNotes(summarizeClinicalEntries(clinicalEntries)),
     createdAt: nowIso(),
   });
 
@@ -618,24 +691,50 @@ function toggleProcedure(visitId, procedureId) {
   renderAll();
 }
 
-function openClinicalNotes(visitId, dateStr = getTodayStr()) {
+function openClinicalNotes(visitId, dateStr = getTodayStr(), entryId = '', defaultType = 'Resultado de exame') {
   const data = loadDay(dateStr);
   const visit = data.patients.find(item => item.id === visitId);
   if (!visit) return;
 
-  const notes = visit.clinicalNotes || {};
+  const entry = entryId ? getClinicalEntries(visit).find(item => item.id === entryId) : null;
   document.getElementById('cn-visit-id').value = `${dateStr}|${visitId}`;
-  document.getElementById('cn-notes').value = getClinicalNoteText(notes);
+  document.getElementById('cn-entry-id').value = entry?.id || '';
+  document.getElementById('cn-note-type').value = entry?.type || defaultType;
+  document.getElementById('cn-notes').value = entry?.text || '';
   openModal('modal-clinical');
+  setTimeout(() => document.getElementById('cn-notes').focus(), 80);
 }
 
 function saveClinicalNotes() {
   const [dateStr, visitId] = document.getElementById('cn-visit-id').value.split('|');
+  const entryId = document.getElementById('cn-entry-id').value;
+  const type = document.getElementById('cn-note-type').value;
+  const text = document.getElementById('cn-notes').value.trim();
   const data = loadDay(dateStr);
   const visit = data.patients.find(item => item.id === visitId);
   if (!visit) return;
 
-  visit.clinicalNotes = createClinicalNotes(document.getElementById('cn-notes').value);
+  if (!text) {
+    alert('Escreva a nota antes de salvar.');
+    return;
+  }
+
+  const entries = getClinicalEntries(visit);
+  const existingIndex = entries.findIndex(entry => entry.id === entryId);
+
+  if (existingIndex >= 0) {
+    entries[existingIndex] = {
+      ...entries[existingIndex],
+      type,
+      text,
+      updatedAt: nowIso(),
+    };
+  } else {
+    entries.push(createClinicalEntry(text, type));
+  }
+
+  visit.clinicalEntries = entries;
+  visit.clinicalNotes = createClinicalNotes(summarizeClinicalEntries(entries));
 
   saveDay(data);
   closeModal('modal-clinical');
@@ -726,7 +825,8 @@ function renderVisitCard(visit) {
   const patient = getVisitPatient(visit);
   const total = calculatePatientTotal(visit);
   const tags = (patient.tags || []).slice(0, 4).map(tag => `<span class="tag-chip">${escapeHTML(tag)}</span>`).join('');
-  const hasClinical = Boolean(getClinicalNoteText(visit.clinicalNotes));
+  const clinicalEntries = getClinicalEntries(visit);
+  const hasClinical = clinicalEntries.length > 0;
   const chips = PROCEDURES.map(proc => {
     const active = (visit.procedures || []).includes(proc.id);
     return `<button class="procedure-chip ${active ? 'active' : ''}" onclick="toggleProcedure('${visit.id}', '${proc.id}')">
@@ -752,8 +852,8 @@ function renderVisitCard(visit) {
         <div class="patient-actions-right">
           <div class="patient-total"><span class="currency">Total</span>${formatCurrency(total).replace('R$', '').trim()}</div>
           <div class="patient-action-buttons">
-            <button class="btn-icon" onclick="openClinicalNotes('${visit.id}')" title="Anotações clínicas">
-              <i data-lucide="${hasClinical ? 'clipboard-check' : 'clipboard-plus'}"></i>
+            <button class="btn-icon" onclick="openClinicalNotes('${visit.id}')" title="Nova nota / resultado de exame">
+              <i data-lucide="${hasClinical ? 'file-plus-2' : 'clipboard-plus'}"></i>
             </button>
             <button class="btn-icon" onclick="openPreviousVisitsPanel('${patient.id}')" title="Consultas anteriores">
               <i data-lucide="panel-right-open"></i>
@@ -768,6 +868,7 @@ function renderVisitCard(visit) {
         </div>
       </div>
       <div class="procedures-grid">${chips}</div>
+      ${hasClinical ? `<div class="visit-note-summary">${clinicalEntries.length} nota${clinicalEntries.length > 1 ? 's' : ''} neste atendimento</div>` : ''}
     </div>`;
 }
 
@@ -880,12 +981,11 @@ function renderPatientHistory(visits) {
   if (!visits.length) return '<p class="text-muted">Nenhuma consulta registrada para este paciente.</p>';
 
   return visits.map(visit => {
-    const noteText = getClinicalNoteText(visit.clinicalNotes);
     const procs = (visit.procedures || []).map(procId => {
       const proc = PROCEDURES.find(item => item.id === procId);
       return proc ? `<span class="proc-tag">${escapeHTML(proc.name)}</span>` : '';
     }).join('');
-    const clinical = noteText ? `<div class="profile-visit-clinical">${renderClinicalText(noteText)}</div>` : '';
+    const clinical = renderClinicalEntries(visit, visit.date, true);
 
     return `
       <div class="profile-visit">
@@ -894,8 +994,8 @@ function renderPatientHistory(visits) {
           <div class="profile-visit-total">${formatCurrency(calculatePatientTotal(visit))}</div>
         </div>
         <div class="profile-visit-procs">${procs || '<span class="text-muted">Sem procedimentos</span>'}</div>
-        ${clinical}
-        <button class="btn-link" onclick="openClinicalNotes('${visit.id}', '${visit.date}')">Editar anotações</button>
+        ${clinical || '<p class="text-muted">Sem notas registradas.</p>'}
+        <button class="btn-link" onclick="openClinicalNotes('${visit.id}', '${visit.date}')">Nova nota</button>
       </div>`;
   }).join('');
 }
@@ -940,7 +1040,6 @@ function renderPreviousVisitsDrawer(visits) {
   }
 
   return visits.map(visit => {
-    const noteText = getClinicalNoteText(visit.clinicalNotes);
     const procs = (visit.procedures || []).map(procId => {
       const proc = PROCEDURES.find(item => item.id === procId);
       return proc ? `<span class="proc-tag">${escapeHTML(proc.name)}</span>` : '';
@@ -956,8 +1055,8 @@ function renderPreviousVisitsDrawer(visits) {
           <strong>${formatCurrency(calculatePatientTotal(visit))}</strong>
         </div>
         <div class="profile-visit-procs">${procs || '<span class="text-muted">Sem procedimentos</span>'}</div>
-        ${noteText ? `<div class="profile-visit-clinical">${renderClinicalText(noteText)}</div>` : '<p class="text-muted">Sem anotações registradas.</p>'}
-        <button class="btn-link" onclick="openClinicalNotes('${visit.id}', '${visit.date}')">Editar esta anotação</button>
+        ${renderClinicalEntries(visit, visit.date, true) || '<p class="text-muted">Sem notas registradas.</p>'}
+        <button class="btn-link" onclick="openClinicalNotes('${visit.id}', '${visit.date}')">Nova nota neste atendimento</button>
       </article>`;
   }).join('');
 }
@@ -1043,7 +1142,6 @@ function showDayDetail(dateStr) {
   } else {
     body.innerHTML = data.patients.map(visit => {
       const patient = getVisitPatient(visit);
-      const noteText = getClinicalNoteText(visit.clinicalNotes);
       const procs = (visit.procedures || []).map(procId => {
         const proc = PROCEDURES.find(item => item.id === procId);
         return proc ? `<span class="proc-tag">${escapeHTML(proc.name)} · ${formatCurrency(proc.price)}</span>` : '';
@@ -1058,8 +1156,8 @@ function showDayDetail(dateStr) {
             <span class="detail-patient-total">${formatCurrency(calculatePatientTotal(visit))}</span>
           </div>
           <div class="detail-procedures">${procs || '<span class="text-muted">Sem procedimentos</span>'}</div>
-          ${noteText ? `<div class="profile-visit-clinical">${renderClinicalText(noteText)}</div>` : ''}
-          <button class="btn-link" onclick="openClinicalNotes('${visit.id}', '${dateStr}')">Editar anotações</button>
+          ${renderClinicalEntries(visit, dateStr, true) || '<p class="text-muted">Sem notas registradas.</p>'}
+          <button class="btn-link" onclick="openClinicalNotes('${visit.id}', '${dateStr}')">Nova nota</button>
         </div>`;
     }).join('');
   }
