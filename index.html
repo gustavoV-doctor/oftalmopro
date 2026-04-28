@@ -3,9 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OftalmoPro - Prontuário Eletrônico</title>
+  <title>OftalmoPro · CRM</title>
   <link rel="stylesheet" href="css/style.css">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
@@ -13,70 +15,114 @@
   <aside class="sidebar">
     <div class="sidebar-header">
       <div class="logo">
-        <i data-lucide="eye" class="logo-icon"></i>
-        <span class="logo-text">OftalmoPro</span>
+        <span class="logo-mark">◐</span>
+        <div>
+          <div class="logo-text">OftalmoPro</div>
+          <div class="logo-tag">CRM</div>
+        </div>
       </div>
     </div>
     <nav class="sidebar-nav">
       <button class="nav-btn active" data-tab="hoje" onclick="switchTab('hoje')">
-        <i data-lucide="calendar-days"></i>
-        <span>Hoje</span>
+        <i data-lucide="calendar"></i><span>Hoje</span>
+      </button>
+      <button class="nav-btn" data-tab="pacientes" onclick="switchTab('pacientes')">
+        <i data-lucide="users"></i><span>Pacientes</span>
       </button>
       <button class="nav-btn" data-tab="historico" onclick="switchTab('historico')">
-        <i data-lucide="history"></i>
-        <span>Histórico</span>
+        <i data-lucide="archive"></i><span>Histórico</span>
       </button>
       <button class="nav-btn" data-tab="relatorios" onclick="switchTab('relatorios')">
-        <i data-lucide="bar-chart-3"></i>
-        <span>Relatórios</span>
+        <i data-lucide="bar-chart-3"></i><span>Relatórios</span>
       </button>
     </nav>
+    <div class="sidebar-footer">
+      <span class="sync-dot" id="sync-dot"></span>
+      <span id="sync-text">Local</span>
+    </div>
   </aside>
 
   <!-- Main Content -->
   <main class="main-content">
-    <!-- Header -->
-    <header class="top-header">
-      <div class="header-info">
-        <h1 id="header-date">Carregando...</h1>
-        <p class="header-subtitle">Gerencie seus pacientes e procedimentos do dia.</p>
-      </div>
-      <div class="header-total" id="header-total">
-        <span class="total-label">TOTAL DO DIA</span>
-        <span class="total-value" id="daily-total">R$ 0,00</span>
-      </div>
-    </header>
 
     <!-- Tab: Hoje -->
     <section class="tab-content active" id="tab-hoje">
-      <!-- Stats Bar -->
-      <div class="stats-bar" id="stats-bar"></div>
+      <header class="page-header">
+        <div class="page-eyebrow">— CONSULTÓRIO · HOJE</div>
+        <div class="page-title-row">
+          <h1 class="page-title">Agenda <em>do dia</em></h1>
+          <div class="page-date">
+            <span class="date-day" id="header-day">—</span>
+            <span class="date-full" id="header-date">—</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="kpi-grid" id="kpi-grid"></div>
+
       <div class="section-header">
-        <h2>Pacientes</h2>
-        <button class="btn-primary" onclick="openAddPatientModal()">
-          <i data-lucide="plus"></i> Novo Paciente
-        </button>
-      </div>
-      <div id="patient-list" class="patient-list">
-        <div class="empty-state" id="empty-state">
-          <i data-lucide="users" class="empty-icon"></i>
-          <p><strong>Nenhum paciente registrado hoje.</strong></p>
-          <p class="text-muted">Clique em "Novo Paciente" para começar.</p>
+        <h2 class="section-title">Pacientes <em>de hoje</em></h2>
+        <div class="section-actions">
+          <button class="btn-ghost" id="btn-sort" onclick="toggleSort()">
+            <i data-lucide="arrow-down-up"></i> <span id="sort-label">Por horário</span>
+          </button>
+          <button class="btn-dark" onclick="openAddVisitModal()">
+            <i data-lucide="plus"></i> Novo paciente
+          </button>
         </div>
       </div>
+
+      <div id="patient-list" class="patient-list"></div>
+    </section>
+
+    <!-- Tab: Pacientes (CRM) -->
+    <section class="tab-content" id="tab-pacientes">
+      <header class="page-header">
+        <div class="page-eyebrow">— CRM · CADASTRO</div>
+        <div class="page-title-row">
+          <h1 class="page-title">Pacientes <em>cadastrados</em></h1>
+          <div class="page-date">
+            <span class="date-day" id="patients-count">0 pacientes</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="patients-toolbar">
+        <div class="search-wrapper">
+          <i data-lucide="search" class="search-icon"></i>
+          <input type="text" id="patients-search" class="search-input" placeholder="Buscar por nome, telefone, CPF..." oninput="renderPatientsList()">
+        </div>
+        <select id="patients-tag-filter" class="filter-select" onchange="renderPatientsList()">
+          <option value="">Todas as tags</option>
+        </select>
+        <button class="btn-dark" onclick="openPatientFormModal()">
+          <i data-lucide="user-plus"></i> Novo cadastro
+        </button>
+      </div>
+
+      <div id="patients-grid" class="patients-grid"></div>
     </section>
 
     <!-- Tab: Histórico -->
     <section class="tab-content" id="tab-historico">
-      <div class="section-header">
-        <h2>Histórico de Atendimentos</h2>
-        <div class="filter-group">
-          <select id="filter-month" onchange="renderHistory()">
-            <option value="">Todos os meses</option>
-          </select>
+      <header class="page-header">
+        <div class="page-eyebrow">— REGISTROS · HISTÓRICO</div>
+        <div class="page-title-row">
+          <h1 class="page-title">Atendimentos <em>anteriores</em></h1>
+          <div class="page-date">
+            <select id="filter-month" class="filter-select" onchange="renderHistory()">
+              <option value="">Todos os meses</option>
+            </select>
+          </div>
         </div>
+      </header>
+
+      <div class="kpi-grid" id="history-summary"></div>
+
+      <div class="section-header">
+        <h2 class="section-title">Linha <em>do tempo</em></h2>
       </div>
-      <div class="history-summary" id="history-summary"></div>
+
       <div class="history-table-wrapper">
         <table class="history-table" id="history-table">
           <thead>
@@ -85,49 +131,162 @@
               <th>Dia</th>
               <th>Pacientes</th>
               <th>Faturamento</th>
-              <th>Ações</th>
+              <th></th>
             </tr>
           </thead>
           <tbody id="history-body"></tbody>
         </table>
         <div class="empty-state" id="history-empty" style="display:none;">
-          <i data-lucide="calendar-x" class="empty-icon"></i>
-          <p><strong>Nenhum atendimento registrado.</strong></p>
+          <p class="empty-title"><em>Nenhum atendimento registrado.</em></p>
+          <p class="empty-sub">Os dias trabalhados aparecerão aqui.</p>
         </div>
       </div>
     </section>
 
     <!-- Tab: Relatórios -->
     <section class="tab-content" id="tab-relatorios">
-      <div class="section-header">
-        <h2>Relatório Financeiro</h2>
-        <div class="filter-group">
-          <select id="report-month" onchange="renderReports()">
-            <option value="">Todos os meses</option>
-          </select>
+      <header class="page-header">
+        <div class="page-eyebrow">— ANÁLISE · RELATÓRIOS</div>
+        <div class="page-title-row">
+          <h1 class="page-title">Visão <em>financeira</em></h1>
+          <div class="page-date">
+            <select id="report-month" class="filter-select" onchange="renderReports()">
+              <option value="">Todos os meses</option>
+            </select>
+          </div>
         </div>
+      </header>
+
+      <div class="kpi-grid" id="report-cards"></div>
+
+      <div class="section-header">
+        <h2 class="section-title">Detalhamento <em>por procedimento</em></h2>
       </div>
-      <div class="report-cards" id="report-cards"></div>
+
       <div class="report-detail" id="report-detail"></div>
     </section>
   </main>
 
-  <!-- Modal: Adicionar Paciente -->
-  <div class="modal-overlay" id="modal-add-patient">
+  <!-- Modal: Adicionar Atendimento (Novo paciente do dia) -->
+  <div class="modal-overlay" id="modal-add-visit">
     <div class="modal">
       <div class="modal-header">
-        <h3>Adicionar Paciente</h3>
-        <button class="modal-close" onclick="closeModal('modal-add-patient')">&times;</button>
+        <h3>Novo <em>atendimento</em></h3>
+        <button class="modal-close" onclick="closeModal('modal-add-visit')">&times;</button>
       </div>
       <div class="modal-body">
-        <label>Nome do Paciente</label>
-        <input type="text" id="input-patient-name" placeholder="Ex: Maria Joana da Silva" autocomplete="off">
+        <label>Paciente</label>
+        <div class="autocomplete-wrapper">
+          <input type="text" id="visit-patient-name" placeholder="Digite o nome..." autocomplete="off"
+                 oninput="onVisitNameInput()" onfocus="onVisitNameInput()" onblur="hideAutocomplete()">
+          <input type="hidden" id="visit-patient-id">
+          <div id="autocomplete-list" class="autocomplete-list"></div>
+        </div>
+        <div id="autocomplete-hint" class="form-hint"></div>
+
         <label>Horário</label>
-        <input type="time" id="input-patient-time">
+        <input type="time" id="visit-time">
       </div>
       <div class="modal-footer">
-        <button class="btn-secondary" onclick="closeModal('modal-add-patient')">Cancelar</button>
-        <button class="btn-primary" onclick="addPatient()">Salvar Paciente</button>
+        <button class="btn-ghost" onclick="closeModal('modal-add-visit')">Cancelar</button>
+        <button class="btn-dark" onclick="saveVisit()">Adicionar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Cadastro de Paciente -->
+  <div class="modal-overlay" id="modal-patient-form">
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h3 id="patient-form-title">Novo <em>cadastro</em></h3>
+        <button class="modal-close" onclick="closeModal('modal-patient-form')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="pf-id">
+        <div class="form-grid">
+          <div class="form-field full">
+            <label>Nome completo *</label>
+            <input type="text" id="pf-name" placeholder="Maria Joana da Silva">
+          </div>
+          <div class="form-field">
+            <label>Telefone</label>
+            <input type="text" id="pf-phone" placeholder="(11) 99999-9999">
+          </div>
+          <div class="form-field">
+            <label>E-mail</label>
+            <input type="email" id="pf-email" placeholder="email@exemplo.com">
+          </div>
+          <div class="form-field">
+            <label>Data de nascimento</label>
+            <input type="date" id="pf-birth">
+          </div>
+          <div class="form-field">
+            <label>CPF</label>
+            <input type="text" id="pf-cpf" placeholder="000.000.000-00">
+          </div>
+          <div class="form-field full">
+            <label>Endereço</label>
+            <input type="text" id="pf-address" placeholder="Rua, número, cidade">
+          </div>
+          <div class="form-field full">
+            <label>Tags <span class="hint">(separadas por vírgula)</span></label>
+            <input type="text" id="pf-tags" placeholder="Glaucoma, Diabético, VIP">
+          </div>
+          <div class="form-field full">
+            <label>Observações gerais</label>
+            <textarea id="pf-notes" rows="3" placeholder="Notas sobre o paciente..."></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-ghost-danger" id="pf-delete-btn" onclick="deletePatientFromForm()" style="display:none;">Excluir</button>
+        <span style="flex:1"></span>
+        <button class="btn-ghost" onclick="closeModal('modal-patient-form')">Cancelar</button>
+        <button class="btn-dark" onclick="savePatientForm()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Perfil do Paciente -->
+  <div class="modal-overlay" id="modal-patient-profile">
+    <div class="modal modal-xlarge">
+      <div class="modal-header">
+        <h3 id="profile-title">Perfil</h3>
+        <button class="modal-close" onclick="closeModal('modal-patient-profile')">&times;</button>
+      </div>
+      <div class="modal-body" id="profile-body"></div>
+      <div class="modal-footer">
+        <button class="btn-ghost" onclick="closeModal('modal-patient-profile')">Fechar</button>
+        <button class="btn-dark" id="profile-edit-btn">Editar cadastro</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Anotações Clínicas -->
+  <div class="modal-overlay" id="modal-clinical">
+    <div class="modal modal-large">
+      <div class="modal-header">
+        <h3>Anotações <em>clínicas</em></h3>
+        <button class="modal-close" onclick="closeModal('modal-clinical')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="cn-visit-id">
+        <div class="form-field full">
+          <label>Queixa principal</label>
+          <textarea id="cn-complaint" rows="2" placeholder="O que o paciente relata..."></textarea>
+        </div>
+        <div class="form-field full">
+          <label>Diagnóstico</label>
+          <textarea id="cn-diagnosis" rows="2" placeholder="Hipótese ou diagnóstico..."></textarea>
+        </div>
+        <div class="form-field full">
+          <label>Conduta</label>
+          <textarea id="cn-conduct" rows="3" placeholder="Tratamento, prescrição, retorno..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-ghost" onclick="closeModal('modal-clinical')">Cancelar</button>
+        <button class="btn-dark" onclick="saveClinicalNotes()">Salvar anotações</button>
       </div>
     </div>
   </div>
@@ -136,12 +295,12 @@
   <div class="modal-overlay" id="modal-day-detail">
     <div class="modal modal-large">
       <div class="modal-header">
-        <h3 id="detail-day-title">Detalhes do Dia</h3>
+        <h3 id="detail-day-title">Detalhes</h3>
         <button class="modal-close" onclick="closeModal('modal-day-detail')">&times;</button>
       </div>
       <div class="modal-body" id="detail-day-body"></div>
       <div class="modal-footer">
-        <button class="btn-secondary" onclick="closeModal('modal-day-detail')">Fechar</button>
+        <button class="btn-ghost" onclick="closeModal('modal-day-detail')">Fechar</button>
       </div>
     </div>
   </div>
