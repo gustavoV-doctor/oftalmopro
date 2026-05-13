@@ -5,13 +5,11 @@ const PROCEDURES = [
   { id: 'mapeamento', name: 'Mapeamento de Retina', price: 100 },
   { id: 'schirmer', name: 'Teste de Schirmer', price: 50 },
   { id: 'tonometria', name: 'Tonometria', price: 30 },
-  { id: 'oct', name: 'OCT', price: 120 },
-  { id: 'campimetria', name: 'Campimetria', price: 80 },
-  { id: 'paquimetria', name: 'Paquimetria', price: 50 },
 ];
 
 const PATIENTS_KEY = 'oftalmopro_patients';
 const MIGRATION_KEY = 'oftalmopro_crm_migrated_v1';
+const SAVE_PATIENT_REGISTRY = window.OFTALMOPRO_SAVE_PATIENTS === true;
 
 let currentTab = 'hoje';
 let currentSort = 'time';
@@ -49,6 +47,14 @@ function escapeHTML(value) {
     '"': '&quot;',
     "'": '&#39;'
   }[char]));
+}
+
+function escapeJS(value) {
+  return String(value ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '');
 }
 
 function formatCurrency(value) {
@@ -269,6 +275,7 @@ function getDayIndex() {
 
 // ===== DADOS: PACIENTES =====
 function loadPatients() {
+  if (!SAVE_PATIENT_REGISTRY) return [];
   const raw = localStorage.getItem(PATIENTS_KEY);
   if (!raw) return [];
   try {
@@ -280,6 +287,7 @@ function loadPatients() {
 }
 
 function savePatients(patients) {
+  if (!SAVE_PATIENT_REGISTRY) return [];
   const clean = patients
     .filter(patient => patient && patient.name)
     .map(patient => compactPatient(patient))
@@ -303,6 +311,7 @@ function findPatientByName(name) {
 }
 
 function upsertPatient(patientData) {
+  if (!SAVE_PATIENT_REGISTRY) return compactPatient(patientData);
   const patients = loadPatients();
   const clean = compactPatient(patientData);
   const existingIndex = patients.findIndex(patient => patient.id === clean.id);
@@ -323,9 +332,14 @@ function upsertPatient(patientData) {
 }
 
 function ensurePatientFromName(name) {
+  if (!SAVE_PATIENT_REGISTRY) return compactPatient({ id: '', name });
   const existing = findPatientByName(name);
   if (existing) return existing;
   return upsertPatient({ id: generateId(), name });
+}
+
+function isFinanceOnlyVisit(visit = {}) {
+  return Boolean(visit.financeOnly) || (!visit.patientId && /^Atendimento\s+\d+$/i.test(String(visit.name || '').trim()));
 }
 
 function getVisitPatient(visit) {
@@ -341,6 +355,33 @@ function getVisitPatient(visit) {
 }
 
 function migrateLegacyData() {
+  if (!SAVE_PATIENT_REGISTRY) {
+    let changedDays = false;
+    getDayIndex().forEach(dateStr => {
+      const data = loadDay(dateStr);
+      let changedDay = false;
+      data.patients = data.patients.map(visit => {
+        const next = {
+          ...visit,
+          patientId: '',
+          clinicalEntries: getClinicalEntries(visit),
+          clinicalNotes: createClinicalNotes(getClinicalNoteText(visit.clinicalNotes)),
+        };
+        changedDay = changedDay || JSON.stringify(next) !== JSON.stringify(visit);
+        return next;
+      });
+      if (changedDay) {
+        localStorage.setItem(storageKey(dateStr), JSON.stringify(data));
+        changedDays = true;
+      }
+    });
+    localStorage.setItem(MIGRATION_KEY, 'history_finance_only');
+    if (changedDays && typeof uploadAllToFirestore === 'function') {
+      uploadAllToFirestore();
+    }
+    return;
+  }
+
   const patients = loadPatients();
   const byName = new Map(patients.map(patient => [normalizeText(patient.name), patient]));
   let changedDays = false;
@@ -351,6 +392,17 @@ function migrateLegacyData() {
     let changedDay = false;
 
     data.patients = data.patients.map(visit => {
+      if (isFinanceOnlyVisit(visit)) {
+        changedDay = true;
+        return {
+          ...visit,
+          patientId: '',
+          financeOnly: true,
+          clinicalEntries: getClinicalEntries(visit),
+          clinicalNotes: createClinicalNotes(getClinicalNoteText(visit.clinicalNotes)),
+        };
+      }
+
       if (visit.patientId) return {
         ...visit,
         clinicalEntries: getClinicalEntries(visit),
@@ -579,6 +631,15 @@ function onVisitNameInput() {
 
   hidden.value = '';
 
+  if (!SAVE_PATIENT_REGISTRY) {
+    list.classList.remove('visible');
+    list.innerHTML = '';
+    hint.innerHTML = query
+      ? 'Este nome ficará apenas no atendimento do dia. Nenhum cadastro de paciente será criado.'
+      : 'Digite o nome para identificar o atendimento de hoje. O cadastro de pacientes está desativado.';
+    return;
+  }
+
   if (!query) {
     list.classList.remove('visible');
     list.innerHTML = '';
@@ -630,15 +691,20 @@ function saveVisit() {
   let patientId = document.getElementById('visit-patient-id').value;
 
   if (!name) {
-    alert('Digite ou selecione um paciente.');
+    alert('Digite o nome para identificar o atendimento de hoje.');
     return;
   }
 
-  let patient = patientId ? getPatientById(patientId) : findPatientByName(name);
-  if (!patient) {
-    patient = ensurePatientFromName(name);
+  let patient = { id: '', name };
+  if (SAVE_PATIENT_REGISTRY) {
+    patient = patientId ? getPatientById(patientId) : findPatientByName(name);
+    if (!patient) {
+      patient = ensurePatientFromName(name);
+    }
+    patientId = patient.id;
+  } else {
+    patientId = '';
   }
-  patientId = patient.id;
 
   const today = getTodayStr();
   const data = loadDay(today);
@@ -827,6 +893,12 @@ function renderVisitCard(visit) {
   const tags = (patient.tags || []).slice(0, 4).map(tag => `<span class="tag-chip">${escapeHTML(tag)}</span>`).join('');
   const clinicalEntries = getClinicalEntries(visit);
   const hasClinical = clinicalEntries.length > 0;
+  const previousAction = patient.id
+    ? `openPreviousVisitsPanel('${patient.id}')`
+    : `openPreviousVisitsPanel('', '${escapeJS(patient.name)}')`;
+  const avatarAction = SAVE_PATIENT_REGISTRY && patient.id
+    ? `showPatientProfile('${patient.id}')`
+    : previousAction;
   const chips = PROCEDURES.map(proc => {
     const active = (visit.procedures || []).includes(proc.id);
     return `<button class="procedure-chip ${active ? 'active' : ''}" onclick="toggleProcedure('${visit.id}', '${proc.id}')">
@@ -838,13 +910,13 @@ function renderVisitCard(visit) {
     <div class="patient-card">
       <div class="patient-header">
         <div class="patient-info">
-          <button class="patient-avatar" onclick="showPatientProfile('${patient.id}')" title="Abrir perfil">${escapeHTML(getInitials(patient.name))}</button>
+          <button class="patient-avatar" onclick="${avatarAction}" title="Abrir histórico">${escapeHTML(getInitials(patient.name))}</button>
           <div>
             <div class="patient-name">${escapeHTML(patient.name)}</div>
             <div class="patient-meta">
               <span>${escapeHTML(visit.time || '--:--')}</span>
               <span class="patient-meta-divider">/</span>
-              <span>${escapeHTML(patient.phone || patient.cpf || 'Cadastro básico')}</span>
+              <span>${SAVE_PATIENT_REGISTRY ? escapeHTML(patient.phone || patient.cpf || 'Cadastro básico') : 'Sem cadastro salvo'}</span>
             </div>
             ${tags ? `<div class="patient-tags">${tags}</div>` : ''}
           </div>
@@ -855,12 +927,14 @@ function renderVisitCard(visit) {
             <button class="btn-icon" onclick="openClinicalNotes('${visit.id}')" title="Nova nota / resultado de exame">
               <i data-lucide="${hasClinical ? 'file-plus-2' : 'clipboard-plus'}"></i>
             </button>
-            <button class="btn-icon" onclick="openPreviousVisitsPanel('${patient.id}')" title="Consultas anteriores">
+            <button class="btn-icon" onclick="${previousAction}" title="Consultas anteriores">
               <i data-lucide="panel-right-open"></i>
             </button>
-            <button class="btn-icon" onclick="showPatientProfile('${patient.id}')" title="Perfil">
-              <i data-lucide="user-round"></i>
-            </button>
+            ${SAVE_PATIENT_REGISTRY && patient.id ? `
+              <button class="btn-icon" onclick="showPatientProfile('${patient.id}')" title="Perfil">
+                <i data-lucide="user-round"></i>
+              </button>
+            ` : ''}
             <button class="btn-icon danger" onclick="deleteVisit('${visit.id}')" title="Remover atendimento">
               <i data-lucide="trash-2"></i>
             </button>
@@ -887,6 +961,22 @@ function populatePatientTagFilter() {
 
 function renderPatientsList() {
   populatePatientTagFilter();
+
+  if (!SAVE_PATIENT_REGISTRY) {
+    document.getElementById('patients-count').textContent = 'cadastro desativado';
+    const toolbar = document.querySelector('.patients-toolbar');
+    if (toolbar) toolbar.style.display = 'none';
+    document.getElementById('patients-grid').innerHTML = `
+      <div class="empty-state" style="grid-column:1 / -1;">
+        <p class="empty-title"><em>Cadastro de pacientes desativado.</em></p>
+        <p class="empty-sub">O sistema vai preservar histórico e financeiro dos atendimentos, sem criar uma base de pacientes.</p>
+      </div>`;
+    refreshIcons();
+    return;
+  }
+
+  const toolbar = document.querySelector('.patients-toolbar');
+  if (toolbar) toolbar.style.display = '';
 
   const query = normalizeText(document.getElementById('patients-search')?.value || '');
   const tag = document.getElementById('patients-tag-filter')?.value || '';
@@ -1181,14 +1271,33 @@ function renderReports() {
     procedureRevenue[proc.id] = 0;
   });
 
-  const days = new Set();
-  const uniquePatients = new Set();
+  const dayStats = new Map();
+  const weekdayStats = new Map();
   let totalRevenue = 0;
 
   visits.forEach(visit => {
-    days.add(visit.date);
-    uniquePatients.add(visit.patientId || normalizeText(visit.name));
-    totalRevenue += calculatePatientTotal(visit);
+    const visitTotal = calculatePatientTotal(visit);
+    const weekday = getDayName(visit.date);
+    totalRevenue += visitTotal;
+
+    if (!dayStats.has(visit.date)) {
+      dayStats.set(visit.date, {
+        date: visit.date,
+        weekday,
+        count: 0,
+        revenue: 0,
+      });
+    }
+    const day = dayStats.get(visit.date);
+    day.count += 1;
+    day.revenue += visitTotal;
+
+    if (!weekdayStats.has(weekday)) {
+      weekdayStats.set(weekday, { weekday, count: 0, revenue: 0 });
+    }
+    const weekdayItem = weekdayStats.get(weekday);
+    weekdayItem.count += 1;
+    weekdayItem.revenue += visitTotal;
 
     (visit.procedures || []).forEach(procId => {
       const proc = PROCEDURES.find(item => item.id === procId);
@@ -1198,25 +1307,30 @@ function renderReports() {
     });
   });
 
-  const totalDays = days.size;
+  const dayRows = Array.from(dayStats.values()).sort((a, b) => b.date.localeCompare(a.date));
+  const totalDays = dayRows.length;
   const avgPerDay = totalDays ? totalRevenue / totalDays : 0;
   const avgTicket = visits.length ? totalRevenue / visits.length : 0;
-  const mostCommonId = getMostCommonProcedureId(procedureCounts);
-  const mostCommon = PROCEDURES.find(proc => proc.id === mostCommonId)?.name || '--';
-
-  document.getElementById('report-cards').innerHTML = `
-    <div class="kpi"><div class="kpi-label">Faturamento</div><div class="kpi-value">${formatCurrencyParts(totalRevenue)}</div><div class="kpi-sub">${totalDays} dias trabalhados</div></div>
-    <div class="kpi"><div class="kpi-label">Ticket médio</div><div class="kpi-value">${formatCurrencyParts(avgTicket)}</div><div class="kpi-sub">por atendimento</div></div>
-    <div class="kpi"><div class="kpi-label">Pacientes únicos</div><div class="kpi-value">${uniquePatients.size}</div><div class="kpi-sub">${visits.length} atendimentos</div></div>
-    <div class="kpi"><div class="kpi-label">Mais feito</div><div class="kpi-value" style="font-size:2rem;">${escapeHTML(mostCommon)}</div><div class="kpi-sub">${procedureCounts[mostCommonId] || 0} vezes · ${formatCurrency(avgPerDay)}/dia</div></div>
-  `;
-
-  const maxRevenue = Math.max(...Object.values(procedureRevenue), 1);
-  const rows = PROCEDURES.map(proc => ({
+  const bestDay = dayRows.slice().sort((a, b) => b.revenue - a.revenue)[0];
+  const bestWeekday = Array.from(weekdayStats.values()).sort((a, b) => b.revenue - a.revenue)[0];
+  const procedureRows = PROCEDURES.map(proc => ({
     ...proc,
     count: procedureCounts[proc.id],
     revenue: procedureRevenue[proc.id],
-  })).filter(proc => proc.count > 0).sort((a, b) => b.revenue - a.revenue);
+  })).filter(proc => proc.count > 0);
+  const topRevenue = procedureRows.slice().sort((a, b) => b.revenue - a.revenue)[0];
+  const topVolume = procedureRows.slice().sort((a, b) => b.count - a.count || b.revenue - a.revenue)[0];
+
+  document.getElementById('report-cards').innerHTML = `
+    <div class="kpi"><div class="kpi-label">Faturamento</div><div class="kpi-value">${formatCurrencyParts(totalRevenue)}</div><div class="kpi-sub">${totalDays} dias trabalhados</div></div>
+    <div class="kpi"><div class="kpi-label">Atendimentos</div><div class="kpi-value">${visits.length}</div><div class="kpi-sub">${formatCurrency(avgPerDay)} por dia</div></div>
+    <div class="kpi"><div class="kpi-label">Ticket médio</div><div class="kpi-value">${formatCurrencyParts(avgTicket)}</div><div class="kpi-sub">por atendimento</div></div>
+    <div class="kpi"><div class="kpi-label">Melhor dia</div><div class="kpi-value report-kpi-word">${bestDay ? formatDateBR(bestDay.date).slice(0, 5) : '--'}</div><div class="kpi-sub">${bestDay ? `${formatCurrency(bestDay.revenue)} · ${bestDay.count} atend.` : 'sem dados'}</div></div>
+  `;
+
+  const maxProcedureRevenue = Math.max(...procedureRows.map(proc => proc.revenue), 1);
+  const maxDayRevenue = Math.max(...dayRows.map(day => day.revenue), 1);
+  const rows = procedureRows.sort((a, b) => b.revenue - a.revenue);
 
   const detail = document.getElementById('report-detail');
   if (!rows.length) {
@@ -1226,20 +1340,171 @@ function renderReports() {
         <p class="empty-sub">Registre atendimentos e procedimentos para ver o relatório.</p>
       </div>`;
   } else {
-    detail.innerHTML = rows.map(proc => `
-      <div class="procedure-row">
-        <span class="name">${escapeHTML(proc.name)}</span>
-        <span class="count">${proc.count}x</span>
-        <div class="procedure-bar"><div class="procedure-bar-fill" style="width:${(proc.revenue / maxRevenue * 100).toFixed(0)}%"></div></div>
-        <span class="total">${formatCurrency(proc.revenue)}</span>
-      </div>
-    `).join('');
+    detail.innerHTML = `
+      <section class="report-panel">
+        <div class="report-panel-head">
+          <h3>Leitura <em>rápida</em></h3>
+        </div>
+        <div class="report-insights">
+          ${reportInsight('Maior receita', topRevenue?.name || '--', topRevenue ? `${formatCurrency(topRevenue.revenue)} · ${topRevenue.count}x` : 'sem dados')}
+          ${reportInsight('Maior volume', topVolume?.name || '--', topVolume ? `${topVolume.count}x · ${formatCurrency(topVolume.revenue)}` : 'sem dados')}
+          ${reportInsight('Dia que mais rende', bestDay ? formatDateBR(bestDay.date) : '--', bestDay ? `${bestDay.weekday} · ${formatCurrency(bestDay.revenue)}` : 'sem dados')}
+          ${reportInsight('Melhor dia da semana', bestWeekday?.weekday || '--', bestWeekday ? `${formatCurrency(bestWeekday.revenue)} no período` : 'sem dados')}
+        </div>
+      </section>
+
+      <section class="report-panel">
+        <div class="report-panel-head">
+          <h3>Evolução <em>por dia</em></h3>
+          <span>${totalDays} dia${totalDays === 1 ? '' : 's'} com atendimento</span>
+        </div>
+        <div class="daily-revenue-list">
+          ${dayRows.map(day => renderDailyRevenueRow(day, maxDayRevenue)).join('')}
+        </div>
+      </section>
+
+      <section class="report-panel">
+        <div class="report-panel-head">
+          <h3>Receita <em>por procedimento</em></h3>
+          <span>ordenado pelo que mais trouxe caixa</span>
+        </div>
+        <div class="procedure-list">
+          ${rows.map(proc => renderProcedureReportRow(proc, maxProcedureRevenue, totalRevenue)).join('')}
+        </div>
+      </section>
+    `;
   }
   refreshIcons();
 }
 
 function getMostCommonProcedureId(counts) {
   return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
+}
+
+function reportInsight(label, value, detail) {
+  return `
+    <article class="report-insight">
+      <span>${escapeHTML(label)}</span>
+      <strong>${escapeHTML(String(value))}</strong>
+      <small>${escapeHTML(detail)}</small>
+    </article>
+  `;
+}
+
+function renderDailyRevenueRow(day, maxRevenue) {
+  const width = Math.max(4, Math.round((day.revenue / maxRevenue) * 100));
+  return `
+    <div class="daily-revenue-row">
+      <span class="date">${formatDateBR(day.date)}</span>
+      <span class="weekday">${escapeHTML(day.weekday)}</span>
+      <span class="count">${day.count} atend.</span>
+      <div class="procedure-bar"><div class="procedure-bar-fill" style="width:${width}%"></div></div>
+      <span class="total">${formatCurrency(day.revenue)}</span>
+    </div>
+  `;
+}
+
+function renderProcedureReportRow(proc, maxRevenue, totalRevenue) {
+  const width = Math.max(4, Math.round((proc.revenue / maxRevenue) * 100));
+  const share = totalRevenue ? Math.round((proc.revenue / totalRevenue) * 100) : 0;
+  return `
+    <div class="procedure-row">
+      <span class="name">${escapeHTML(proc.name)}</span>
+      <span class="count">${proc.count}x</span>
+      <div class="procedure-bar"><div class="procedure-bar-fill" style="width:${width}%"></div></div>
+      <span class="share">${share}%</span>
+      <span class="total">${formatCurrency(proc.revenue)}</span>
+    </div>
+  `;
+}
+
+// ===== BACKUP PRIVADO: HISTORICO + FINANCEIRO =====
+function buildHistoryFinanceBackup() {
+  const days = getDayIndex().slice().sort().map(dateStr => {
+    const data = loadDay(dateStr);
+    const attendances = (data.patients || []).map((visit, index) => {
+      const procedures = (visit.procedures || []).map(procId => {
+        const proc = PROCEDURES.find(item => item.id === procId);
+        return {
+          id: procId,
+          name: proc?.name || procId,
+          price: proc?.price || 0,
+        };
+      });
+      return {
+        attendanceNumber: index + 1,
+        time: visit.time || '',
+        procedures,
+        total: procedures.reduce((sum, proc) => sum + Number(proc.price || 0), 0),
+      };
+    });
+    return {
+      date: dateStr,
+      weekday: getDayName(dateStr),
+      attendances,
+      patientCount: attendances.length,
+      revenue: attendances.reduce((sum, visit) => sum + Number(visit.total || 0), 0),
+    };
+  });
+
+  const procedureSummary = {};
+  days.forEach(day => {
+    day.attendances.forEach(attendance => {
+      attendance.procedures.forEach(proc => {
+        if (!procedureSummary[proc.id]) {
+          procedureSummary[proc.id] = {
+            id: proc.id,
+            name: proc.name,
+            count: 0,
+            revenue: 0,
+          };
+        }
+        procedureSummary[proc.id].count += 1;
+        procedureSummary[proc.id].revenue += Number(proc.price || 0);
+      });
+    });
+  });
+
+  return {
+    exportedAt: nowIso(),
+    privacy: 'history_finance_only_no_patient_registry',
+    totals: {
+      daysWorked: days.filter(day => day.patientCount > 0).length,
+      attendances: days.reduce((sum, day) => sum + day.patientCount, 0),
+      revenue: days.reduce((sum, day) => sum + day.revenue, 0),
+    },
+    days,
+    procedureSummary: Object.values(procedureSummary).sort((a, b) => b.revenue - a.revenue),
+  };
+}
+
+function downloadHistoryFinanceBackup() {
+  const backup = buildHistoryFinanceBackup();
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `oftalmopro-historico-financeiro-${getTodayStr()}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  showSyncStatus?.('synced', 'Backup gerado');
+}
+
+async function importFinanceFromOriginalOftalmoPro() {
+  if (typeof importFinanceFromLegacyDays !== 'function') {
+    alert('Importação da versão antiga indisponível neste modo.');
+    return;
+  }
+
+  const ok = await importFinanceFromLegacyDays();
+  if (ok) {
+    renderAll();
+    return;
+  }
+
+  alert('Não consegui copiar automaticamente do OftalmoPro antigo. Se os dados estiverem só no navegador do site publicado, a gente exporta de lá e importa aqui sem salvar pacientes.');
 }
 
 // ===== EVENTOS =====

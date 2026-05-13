@@ -15,6 +15,57 @@ const db = firebase.firestore();
 let syncStatus = 'idle'; // idle, syncing, synced, error
 let cloudSyncAvailable = true;
 
+function shouldSavePatientRegistry() {
+  return window.OFTALMOPRO_SAVE_PATIENTS === true;
+}
+
+function shouldImportOldPatients() {
+  return window.OFTALMOPRO_IMPORT_OLD_PATIENTS === true;
+}
+
+function cloudDaysCollection() {
+  return 'days_current';
+}
+
+function cloudPatientsDocId() {
+  return 'patients_current';
+}
+
+function sanitizeDayForFinanceOnly(dayData = {}) {
+  return {
+    date: dayData.date || '',
+    patients: Array.isArray(dayData.patients)
+      ? dayData.patients.map((visit, index) => ({
+          id: visit.id || `attendance-${index + 1}`,
+          time: visit.time || '',
+          procedures: Array.isArray(visit.procedures) ? visit.procedures : [],
+          createdAt: visit.createdAt || '',
+        }))
+      : [],
+    privacy: 'history_finance_only_no_patient_registry',
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function restoreFinanceOnlyDay(dayData = {}) {
+  return {
+    date: dayData.date || '',
+    patients: Array.isArray(dayData.patients)
+      ? dayData.patients.map((visit, index) => ({
+          id: visit.id || `attendance-${index + 1}`,
+          patientId: '',
+          name: `Atendimento ${index + 1}`,
+          time: visit.time || '',
+          procedures: Array.isArray(visit.procedures) ? visit.procedures : [],
+          clinicalEntries: [],
+          clinicalNotes: { text: '' },
+          financeOnly: true,
+          createdAt: visit.createdAt || '',
+        }))
+      : [],
+  };
+}
+
 function isPermissionDenied(error) {
   return error && (
     error.code === 'permission-denied' ||
@@ -68,13 +119,14 @@ function showSyncStatus(status, msg) {
 
 // Upload patient registry to Firestore
 async function uploadPatientsToFirestore() {
+  if (!shouldSavePatientRegistry()) return false;
   if (!cloudSyncAvailable) return false;
 
   const raw = localStorage.getItem('oftalmopro_patients') || '[]';
   const patients = JSON.parse(raw);
   if (!patients.length) return false;
 
-  await db.collection('crm').doc('patients').set({
+  await db.collection('crm').doc(cloudPatientsDocId()).set({
     patients,
     updatedAt: new Date().toISOString()
   });
@@ -83,9 +135,34 @@ async function uploadPatientsToFirestore() {
 
 // Download patient registry and merge by most recent updatedAt
 async function downloadPatientsFromFirestore() {
+  if (!shouldSavePatientRegistry()) return false;
   if (!cloudSyncAvailable) return false;
 
   try {
+    if (!shouldImportOldPatients()) {
+      const doc = await db.collection('crm').doc(cloudPatientsDocId()).get();
+      if (!doc.exists) return false;
+
+      const cloudPatients = doc.data().patients || [];
+      const localPatients = JSON.parse(localStorage.getItem('oftalmopro_patients') || '[]');
+      const merged = new Map();
+
+      [...localPatients, ...cloudPatients].forEach(patient => {
+        if (!patient || !patient.id) return;
+        const current = merged.get(patient.id);
+        if (!current || String(patient.updatedAt || '') >= String(current.updatedAt || '')) {
+          merged.set(patient.id, patient);
+        }
+      });
+
+      const nextPatients = Array.from(merged.values()).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'pt-BR'));
+      const changed = JSON.stringify(nextPatients) !== JSON.stringify(localPatients);
+      if (changed) {
+        localStorage.setItem('oftalmopro_patients', JSON.stringify(nextPatients));
+      }
+      return changed;
+    }
+
     const doc = await db.collection('crm').doc('patients').get();
     if (!doc.exists) return false;
 
@@ -123,7 +200,8 @@ async function uploadDayToFirestore(dateStr) {
     const raw = localStorage.getItem('oftalmopro_' + dateStr);
     if (!raw) return false;
     const dayData = JSON.parse(raw);
-    await db.collection('days').doc(dateStr).set(dayData);
+    const payload = shouldSavePatientRegistry() ? dayData : sanitizeDayForFinanceOnly(dayData);
+    await db.collection(cloudDaysCollection()).doc(dateStr).set(payload);
     return true;
   } catch (e) {
     if (!handleCloudError(e, 'Salvo local')) {
@@ -136,10 +214,13 @@ async function uploadDayToFirestore(dateStr) {
 // Download all days from Firestore and merge into localStorage
 async function downloadFromFirestore() {
   if (!cloudSyncAvailable) return false;
+  if (!shouldSavePatientRegistry()) {
+    return downloadFinanceOnlyFromFirestore();
+  }
 
   try {
     showSyncStatus('syncing', 'Sincronizando...');
-    const snapshot = await db.collection('days').get();
+    const snapshot = await db.collection(cloudDaysCollection()).get();
     const idx = JSON.parse(localStorage.getItem('oftalmopro_index') || '[]');
     let changed = false;
     snapshot.forEach(doc => {
@@ -173,6 +254,73 @@ async function downloadFromFirestore() {
   }
 }
 
+async function downloadFinanceOnlyFromFirestore() {
+  if (!cloudSyncAvailable) return false;
+
+  try {
+    showSyncStatus('syncing', 'Buscando histórico...');
+    const snapshot = await db.collection(cloudDaysCollection()).get();
+    const idx = JSON.parse(localStorage.getItem('oftalmopro_index') || '[]');
+    let changed = false;
+
+    snapshot.forEach(doc => {
+      const dateStr = doc.id;
+      const localRaw = localStorage.getItem('oftalmopro_' + dateStr);
+      if (localRaw) return;
+      const dayData = restoreFinanceOnlyDay(doc.data());
+      localStorage.setItem('oftalmopro_' + dateStr, JSON.stringify(dayData));
+      if (!idx.includes(dateStr)) idx.push(dateStr);
+      changed = true;
+    });
+
+    if (changed) {
+      idx.sort();
+      localStorage.setItem('oftalmopro_index', JSON.stringify(idx));
+    }
+    showSyncStatus(changed ? 'synced' : 'offline', changed ? 'Histórico importado' : 'Histórico local');
+    return changed;
+  } catch (e) {
+    if (!handleCloudError(e, 'Histórico local')) {
+      console.warn('Finance-only download error:', e);
+      showSyncStatus('error', 'Erro ao buscar histórico');
+    }
+    return false;
+  }
+}
+
+async function importFinanceFromLegacyDays() {
+  if (!cloudSyncAvailable) {
+    showSyncStatus('offline', 'Histórico local');
+    return false;
+  }
+
+  try {
+    showSyncStatus('syncing', 'Copiando antigo...');
+    const snapshot = await db.collection('days').get();
+    const idx = JSON.parse(localStorage.getItem('oftalmopro_index') || '[]');
+    let imported = 0;
+
+    snapshot.forEach(doc => {
+      const dateStr = doc.id;
+      const dayData = restoreFinanceOnlyDay(sanitizeDayForFinanceOnly(doc.data()));
+      localStorage.setItem('oftalmopro_' + dateStr, JSON.stringify(dayData));
+      if (!idx.includes(dateStr)) idx.push(dateStr);
+      imported += 1;
+    });
+
+    idx.sort();
+    localStorage.setItem('oftalmopro_index', JSON.stringify(idx));
+    showSyncStatus(imported ? 'synced' : 'offline', imported ? `${imported} dia(s) copiado(s)` : 'Nada para copiar');
+    return imported > 0;
+  } catch (e) {
+    if (!handleCloudError(e, 'Sem acesso ao antigo')) {
+      console.warn('Legacy import error:', e);
+      showSyncStatus('error', 'Erro ao copiar antigo');
+    }
+    return false;
+  }
+}
+
 // Upload all local days to Firestore
 async function uploadAllToFirestore() {
   if (!cloudSyncAvailable) {
@@ -188,13 +336,14 @@ async function uploadAllToFirestore() {
       idx.forEach(dateStr => {
         const raw = localStorage.getItem('oftalmopro_' + dateStr);
         if (raw) {
-          const ref = db.collection('days').doc(dateStr);
-          batch.set(ref, JSON.parse(raw));
+          const ref = db.collection(cloudDaysCollection()).doc(dateStr);
+          const payload = shouldSavePatientRegistry() ? JSON.parse(raw) : sanitizeDayForFinanceOnly(JSON.parse(raw));
+          batch.set(ref, payload);
         }
       });
       await batch.commit();
     }
-    await uploadPatientsToFirestore();
+    if (shouldSavePatientRegistry()) await uploadPatientsToFirestore();
     showSyncStatus('synced', 'Sincronizado');
     return true;
   } catch (e) {
