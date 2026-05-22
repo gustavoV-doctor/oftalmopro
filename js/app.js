@@ -31,6 +31,11 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function getCurrentTimeHHMM() {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+}
+
 function normalizeText(value) {
   return String(value || '')
     .normalize('NFD')
@@ -687,7 +692,7 @@ function hideAutocomplete() {
 
 function saveVisit() {
   const name = document.getElementById('visit-patient-name').value.trim();
-  const time = document.getElementById('visit-time').value || '--:--';
+  const time = document.getElementById('visit-time').value || getCurrentTimeHHMM();
   let patientId = document.getElementById('visit-patient-id').value;
 
   if (!name) {
