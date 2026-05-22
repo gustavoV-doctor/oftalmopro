@@ -898,10 +898,6 @@ function renderToday() {
               <span class="proc-strip-name">${escapeHTML(proc.name)}</span>
             </div>
           `).join('')}
-          <div class="proc-strip-item proc-strip-total">
-            <span class="proc-strip-count">${totalProcs}</span>
-            <span class="proc-strip-name">Total</span>
-          </div>
         </div>
       `;
     }
