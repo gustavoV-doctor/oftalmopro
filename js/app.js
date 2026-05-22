@@ -36,6 +36,17 @@ function getCurrentTimeHHMM() {
   return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 }
 
+function displayVisitTime(visit) {
+  if (visit?.time && visit.time !== '--:--') return visit.time;
+  if (visit?.createdAt) {
+    const date = new Date(visit.createdAt);
+    if (!Number.isNaN(date.getTime())) {
+      return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+    }
+  }
+  return '--:--';
+}
+
 function normalizeText(value) {
   return String(value || '')
     .normalize('NFD')
@@ -535,7 +546,7 @@ function closeModal(id) {
 function openAddVisitModal() {
   document.getElementById('visit-patient-name').value = '';
   document.getElementById('visit-patient-id').value = '';
-  document.getElementById('visit-time').value = '';
+  document.getElementById('visit-time').value = getCurrentTimeHHMM();
   document.getElementById('visit-notes').value = '';
   document.getElementById('autocomplete-list').innerHTML = '';
   document.getElementById('autocomplete-list').classList.remove('visible');
@@ -828,14 +839,16 @@ function toggleSort() {
 function sortVisits(visits) {
   visits.sort((a, b) => {
     if (currentSort === 'name') return (a.name || '').localeCompare(b.name || '', 'pt-BR');
-    // Sem horario marcado (novos do dia) vao pro topo, mais recem-adicionado primeiro
-    const aNoTime = !a.time || a.time === '--:--';
-    const bNoTime = !b.time || b.time === '--:--';
+    const aTime = displayVisitTime(a);
+    const bTime = displayVisitTime(b);
+    const aNoTime = aTime === '--:--';
+    const bNoTime = bTime === '--:--';
+    // Realmente sem horario (sem createdAt valido) vai pro topo
     if (aNoTime && bNoTime) return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
     if (aNoTime) return -1;
     if (bNoTime) return 1;
     // Com horario: ordem decrescente (mais tarde em cima)
-    return String(b.time || '').localeCompare(String(a.time || ''));
+    return bTime.localeCompare(aTime);
   });
 }
 
@@ -956,7 +969,7 @@ function renderVisitCard(visit) {
           <div>
             <div class="patient-name">${escapeHTML(patient.name)}</div>
             <div class="patient-meta">
-              <span>${escapeHTML(visit.time || '--:--')}</span>
+              <span>${escapeHTML(displayVisitTime(visit))}</span>
               <span class="patient-meta-divider">/</span>
               <span>${SAVE_PATIENT_REGISTRY ? escapeHTML(patient.phone || patient.cpf || 'Cadastro básico') : 'Sem cadastro salvo'}</span>
             </div>
@@ -1122,7 +1135,7 @@ function renderPatientHistory(visits) {
     return `
       <div class="profile-visit">
         <div class="profile-visit-header">
-          <div class="profile-visit-date">${formatDateBR(visit.date)} · ${escapeHTML(getDayName(visit.date))} · ${escapeHTML(visit.time || '--:--')}</div>
+          <div class="profile-visit-date">${formatDateBR(visit.date)} · ${escapeHTML(getDayName(visit.date))} · ${escapeHTML(displayVisitTime(visit))}</div>
           <div class="profile-visit-total">${formatCurrency(calculatePatientTotal(visit))}</div>
         </div>
         <div class="profile-visit-procs">${procs || '<span class="text-muted">Sem procedimentos</span>'}</div>
@@ -1181,7 +1194,7 @@ function renderPreviousVisitsDrawer(visits) {
       <article class="drawer-visit">
         <div class="drawer-visit-header">
           <div>
-            <div class="profile-visit-date">${formatDateBR(visit.date)} · ${escapeHTML(visit.time || '--:--')}</div>
+            <div class="profile-visit-date">${formatDateBR(visit.date)} · ${escapeHTML(displayVisitTime(visit))}</div>
             <div class="text-muted">${escapeHTML(getDayName(visit.date))}</div>
           </div>
           <strong>${formatCurrency(calculatePatientTotal(visit))}</strong>
@@ -1283,7 +1296,7 @@ function showDayDetail(dateStr) {
           <div class="detail-patient-header">
             <div>
               <span class="detail-patient-name">${escapeHTML(patient.name)}</span>
-              <span class="detail-patient-time">${escapeHTML(visit.time || '--:--')}</span>
+              <span class="detail-patient-time">${escapeHTML(displayVisitTime(visit))}</span>
             </div>
             <span class="detail-patient-total">${formatCurrency(calculatePatientTotal(visit))}</span>
           </div>
