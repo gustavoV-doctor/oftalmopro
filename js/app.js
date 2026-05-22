@@ -871,6 +871,42 @@ function renderToday() {
     </div>
   `;
 
+  // Procedimentos do dia
+  const procStripEl = document.getElementById('proc-strip');
+  if (procStripEl) {
+    const dayProcCounts = {};
+    PROCEDURES.forEach(proc => { dayProcCounts[proc.id] = 0; });
+    data.patients.forEach(visit => {
+      (visit.procedures || []).forEach(procId => {
+        if (dayProcCounts[procId] !== undefined) dayProcCounts[procId]++;
+      });
+    });
+    const totalProcs = Object.values(dayProcCounts).reduce((s, n) => s + n, 0);
+
+    if (!totalProcs) {
+      procStripEl.innerHTML = `
+        <div class="proc-strip-label">Procedimentos <em>de hoje</em></div>
+        <div class="proc-strip-empty">Nenhum procedimento marcado ainda.</div>
+      `;
+    } else {
+      procStripEl.innerHTML = `
+        <div class="proc-strip-label">Procedimentos <em>de hoje</em></div>
+        <div class="proc-strip-list">
+          ${PROCEDURES.map(proc => `
+            <div class="proc-strip-item ${dayProcCounts[proc.id] === 0 ? 'is-zero' : ''}">
+              <span class="proc-strip-count">${dayProcCounts[proc.id]}</span>
+              <span class="proc-strip-name">${escapeHTML(proc.name)}</span>
+            </div>
+          `).join('')}
+          <div class="proc-strip-item proc-strip-total">
+            <span class="proc-strip-count">${totalProcs}</span>
+            <span class="proc-strip-name">Total</span>
+          </div>
+        </div>
+      `;
+    }
+  }
+
   const listEl = document.getElementById('patient-list');
   if (!visits.length) {
     listEl.innerHTML = `

@@ -1475,6 +1475,119 @@ em {
 ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--ink-4); }
 
+/* ===== PROC STRIP (Hoje) ===== */
+.proc-strip {
+  margin-top: -36px;
+  margin-bottom: 56px;
+  padding: 22px 0 26px;
+  border-bottom: 1px solid var(--line);
+}
+
+.proc-strip-label {
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  margin-bottom: 18px;
+}
+
+.proc-strip-label em {
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-2);
+  font-size: 0.95rem;
+  margin-left: 4px;
+}
+
+.proc-strip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  align-items: stretch;
+}
+
+.proc-strip-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 0 24px;
+  border-right: 1px solid var(--line-soft);
+}
+
+.proc-strip-item:first-child { padding-left: 0; }
+.proc-strip-item:last-child { border-right: none; }
+
+.proc-strip-count {
+  font-family: var(--serif);
+  font-size: 2rem;
+  font-weight: 500;
+  color: var(--ink);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  min-width: 1ch;
+}
+
+.proc-strip-name {
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.proc-strip-item.is-zero .proc-strip-count {
+  color: var(--ink-4);
+  font-weight: 400;
+}
+
+.proc-strip-item.is-zero .proc-strip-name {
+  color: var(--ink-4);
+}
+
+.proc-strip-item.proc-strip-total {
+  margin-left: auto;
+  padding-right: 0;
+}
+
+.proc-strip-item.proc-strip-total .proc-strip-count {
+  color: var(--ink);
+}
+
+.proc-strip-item.proc-strip-total .proc-strip-name {
+  color: var(--ink-2);
+}
+
+.proc-strip-empty {
+  font-size: 0.85rem;
+  color: var(--ink-3);
+  font-style: italic;
+  font-family: var(--serif);
+}
+
+@media (max-width: 768px) {
+  .proc-strip { margin-top: -24px; margin-bottom: 36px; }
+  .proc-strip-list { gap: 18px 0; }
+  .proc-strip-item {
+    padding: 0 16px;
+    flex: 1 1 calc(50% - 1px);
+    border-bottom: 1px solid var(--line-soft);
+    padding-bottom: 14px;
+  }
+  .proc-strip-item:nth-child(2n) { border-right: none; }
+  .proc-strip-item.proc-strip-total {
+    margin-left: 0;
+    flex: 1 1 100%;
+    border-right: none;
+    border-bottom: none;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+  }
+}
+
 /* ===== RESPONSIVE ===== */
 @media (max-width: 960px) {
   .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 24px 0; }
