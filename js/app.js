@@ -823,9 +823,14 @@ function toggleSort() {
 function sortVisits(visits) {
   visits.sort((a, b) => {
     if (currentSort === 'name') return (a.name || '').localeCompare(b.name || '', 'pt-BR');
-    if (a.time === '--:--') return 1;
-    if (b.time === '--:--') return -1;
-    return String(a.time || '').localeCompare(String(b.time || ''));
+    // Sem horario marcado (novos do dia) vao pro topo, mais recem-adicionado primeiro
+    const aNoTime = !a.time || a.time === '--:--';
+    const bNoTime = !b.time || b.time === '--:--';
+    if (aNoTime && bNoTime) return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
+    if (aNoTime) return -1;
+    if (bNoTime) return 1;
+    // Com horario: ordem decrescente (mais tarde em cima)
+    return String(b.time || '').localeCompare(String(a.time || ''));
   });
 }
 
