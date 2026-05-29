@@ -864,18 +864,13 @@ function renderToday() {
   document.getElementById('header-date').textContent = dateParts.full;
 
   const dailyTotal = data.patients.reduce((sum, visit) => sum + calculatePatientTotal(visit), 0);
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().split('T')[0];
-  const yesterdayTotal = calculateDayTotal(yesterdayStr);
-  const monthlyTotal = getMonthlyTotal();
   const avgTicket = data.patients.length ? dailyTotal / data.patients.length : 0;
 
   document.getElementById('kpi-grid').innerHTML = `
     <div class="kpi">
       <div class="kpi-label">Faturamento</div>
       <div class="kpi-value">${formatCurrencyParts(dailyTotal)}</div>
-      <div class="kpi-sub">${dailyTotal - yesterdayTotal >= 0 ? '+' : ''}${formatCurrency(dailyTotal - yesterdayTotal)} vs ontem</div>
+      <div class="kpi-sub">hoje</div>
     </div>
     <div class="kpi">
       <div class="kpi-label">Pacientes</div>
@@ -886,11 +881,6 @@ function renderToday() {
       <div class="kpi-label">Ticket médio</div>
       <div class="kpi-value">${formatCurrencyParts(avgTicket)}</div>
       <div class="kpi-sub">por paciente</div>
-    </div>
-    <div class="kpi">
-      <div class="kpi-label">Mês corrente</div>
-      <div class="kpi-value">${formatCurrencyParts(monthlyTotal)}</div>
-      <div class="kpi-sub">${getAllVisits().filter(visit => isCurrentMonth(visit.date)).length} atendimentos</div>
     </div>
   `;
 
@@ -1410,8 +1400,16 @@ function renderReports() {
 
       <section class="report-panel">
         <div class="report-panel-head">
-          <h3>Evolução <em>por dia</em></h3>
-          <span>${totalDays} dia${totalDays === 1 ? '' : 's'} com atendimento</span>
+          <h3>Composição <em>do faturamento</em></h3>
+          <span>${formatCurrency(totalRevenue)} no período · ${totalDays} dia${totalDays === 1 ? '' : 's'} com atendimento</span>
+        </div>
+        ${renderRevenuePie(rows, totalRevenue)}
+      </section>
+
+      <section class="report-panel">
+        <div class="report-panel-head">
+          <h3>Detalhe <em>por dia</em></h3>
+          <span>ordenado do mais recente</span>
         </div>
         <div class="daily-revenue-list">
           ${dayRows.map(day => renderDailyRevenueRow(day, maxDayRevenue)).join('')}
@@ -1443,6 +1441,74 @@ function reportInsight(label, value, detail) {
       <strong>${escapeHTML(String(value))}</strong>
       <small>${escapeHTML(detail)}</small>
     </article>
+  `;
+}
+
+const PIE_PALETTE = ['#1f1d1a', '#5a4a3a', '#8a7152', '#b59874', '#d6bd9a', '#a8a496'];
+
+function renderRevenuePie(procedureRows, totalRevenue) {
+  if (!procedureRows.length || !totalRevenue) {
+    return '<div class="chart-empty text-muted">Sem dados para o período.</div>';
+  }
+
+  const slices = procedureRows.slice().sort((a, b) => b.revenue - a.revenue);
+  const size = 240;
+  const cx = size / 2;
+  const cy = size / 2;
+  const radius = 100;
+  const inner = 58;
+
+  let angle = -Math.PI / 2;
+  const paths = slices.map((slice, i) => {
+    const share = slice.revenue / totalRevenue;
+    const sweep = share * Math.PI * 2;
+    const end = angle + sweep;
+    const largeArc = sweep > Math.PI ? 1 : 0;
+    const x1 = cx + radius * Math.cos(angle);
+    const y1 = cy + radius * Math.sin(angle);
+    const x2 = cx + radius * Math.cos(end);
+    const y2 = cy + radius * Math.sin(end);
+    const x3 = cx + inner * Math.cos(end);
+    const y3 = cy + inner * Math.sin(end);
+    const x4 = cx + inner * Math.cos(angle);
+    const y4 = cy + inner * Math.sin(angle);
+    const color = PIE_PALETTE[i % PIE_PALETTE.length];
+    angle = end;
+    if (share >= 0.999) {
+      return `
+        <circle cx="${cx}" cy="${cy}" r="${radius}" fill="${color}"/>
+        <circle cx="${cx}" cy="${cy}" r="${inner}" fill="var(--bg-card)"/>
+      `;
+    }
+    return `<path d="M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${radius} ${radius} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} L ${x3.toFixed(2)} ${y3.toFixed(2)} A ${inner} ${inner} 0 ${largeArc} 0 ${x4.toFixed(2)} ${y4.toFixed(2)} Z" fill="${color}"/>`;
+  }).join('');
+
+  const legend = slices.map((slice, i) => {
+    const share = Math.round((slice.revenue / totalRevenue) * 100);
+    const color = PIE_PALETTE[i % PIE_PALETTE.length];
+    return `
+      <div class="pie-legend-row">
+        <span class="pie-swatch" style="background:${color}"></span>
+        <span class="pie-legend-name">${escapeHTML(slice.name)}</span>
+        <span class="pie-legend-share">${share}%</span>
+        <span class="pie-legend-value">${formatCurrency(slice.revenue)}</span>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="revenue-pie">
+      <div class="pie-svg-wrap">
+        <svg viewBox="0 0 ${size} ${size}" role="img" aria-label="Composição do faturamento por procedimento">
+          ${paths}
+        </svg>
+        <div class="pie-center">
+          <span class="pie-center-label">Total</span>
+          <strong>${formatCurrency(totalRevenue)}</strong>
+        </div>
+      </div>
+      <div class="pie-legend">${legend}</div>
+    </div>
   `;
 }
 
